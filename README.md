@@ -8,6 +8,7 @@ The feature of the repo has been shared with some teams, such as distributing Ve
 The cleaning the invalid files up or arranging the whole material will be done later.
 
 ## Run pre-commit after code modification
+
 To install `pre-commit`, use
 
 ```bash
@@ -19,6 +20,22 @@ To format and lint the python-based code, use
 ```bash
 pre-commit
 ```
+
+## Use Commitizen when you commit the code
+
+To install `commitizen`, use
+
+```bash
+pip install --user -U commitizen
+```
+
+To commit, use
+```bash
+cz c
+```
+
+Refer to [Commitizen](https://commitizen-tools.github.io/commitizen/commands/commit/).
+
 ## Accessing the Dataset
 
 The experimenal dataset may be too huge to share.
