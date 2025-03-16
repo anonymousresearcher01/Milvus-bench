@@ -7,6 +7,19 @@ This is built around an motivational materials that stores a set of scripts, and
 The feature of the repo has been shared with some teams, such as distributing VectorDB or offloading VectorDB to DPU or SSD. To avoid unnecessary code conflict in the working scenarios, it is desirable to create the own folder and keep working on that.
 The cleaning the invalid files up or arranging the whole material will be done later.
 
+## Run pre-commit after code modification
+To install `pre-commit`, use
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+To format and lint the python-based code, use
+```bash
+pre-commit
+```
 ## Accessing the Dataset
+
 The experimenal dataset may be too huge to share.
 This could be possible to share the link for other member to download from official dataset website or Google drive, etc.
