@@ -187,3 +187,5 @@ MANIFEST
 *.sst
 *.meta
 milvus-expr/volumes/
+milvus-expr/result_stat/
+milvus-expr/milvus_io_results/
