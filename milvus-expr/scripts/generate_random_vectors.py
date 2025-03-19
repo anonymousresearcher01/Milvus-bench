@@ -20,7 +20,7 @@ def generate_random_text(min_words=20, max_words=80):
     return " ".join(words)
 
 
-parser = argparse.ArgumentParser(description="Milvus NQ Performance Test")
+parser = argparse.ArgumentParser(description="Random String Genenration with Embedding")
 parser.add_argument(
     "--out_path",
     "-o",
@@ -28,7 +28,7 @@ parser.add_argument(
     default="/mnt/sda/milvus-io-test/data/random_generated/",
     help="Path for storing results",
 )
-parser.add_argument("--num", type=int, default=1000, help="Number of samples to use for generating")
+parser.add_argument("--num", type=int, default=1000, help="Number of samples to use for generation")
 args = parser.parse_args()
 
 data_dir = args.out_path  # "/mnt/sda/milvus-io-test/data/random_generated/"
@@ -104,6 +104,9 @@ for batch_idx in tqdm(range(num_batches)):
     batch_embedding_dim = process_batch(start_idx, end_idx, current_batch_size, embedding_dim)
     if embedding_dim is None:
         embedding_dim = batch_embedding_dim
+
+fp = np.memmap(embeddings_file, dtype=np.float32, mode="r", shape=(num_texts, embedding_dim))
+np.save(embeddings_file, np.array(fp))
 
 print("Completed:")
 print(f"- Original texts: {text_file}")
