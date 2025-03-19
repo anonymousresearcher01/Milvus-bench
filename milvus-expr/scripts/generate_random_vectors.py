@@ -1,4 +1,5 @@
 import argparse
+import gc
 import numpy as np
 import pandas as pd
 import os
@@ -57,6 +58,11 @@ for i in tqdm(range(0, len(texts), batch_size)):
     batch_texts = texts[i : i + batch_size]
     batch_embeddings = model.encode(batch_texts)
     embeddings.extend(batch_embeddings)
+
+    del batch_texts
+    del batch_embeddings
+    gc.collect()
+
 
 embeddings_array = np.array(embeddings).astype(np.float32)
 embeddings_file = os.path.join(data_dir, f"text_embeddings_{args.num}.npy")
