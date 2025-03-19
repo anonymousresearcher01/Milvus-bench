@@ -100,5 +100,11 @@ docker-compose up -d
 ```
 
 ## Supported scripts
-
-- docker stat monitoring script
+The supported scripts are stored in `scripts` directory.
+- `docker_monitor.py`: docker stat monitoring script
+- `generate_random_vector.py`: script for generating random texts with embedding results
+  - The output directory must be adjusted by the user.
+- `run_insert_expr.py`: script for inserting embedding vectors (The L stage of ETL pipeline)
+- `run_index_build_expr.py`: script for building index using stored vectors
+- `run_index_load_expr.py`: script for loading the index from the disk to the memory.
+- `run_search_expr.py`: script for searching top-k using index and original texts.
