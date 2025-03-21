@@ -99,6 +99,25 @@ mkdir -p volumes/etcd volumes/minio volumes/milvus
 docker-compose up -d
 ```
 
+## Error reports
+When `drop_collection()` is being executed, you may face failed error of `InvalidateCollectionMetaCache` since the inconsistency between Node IDs of Proxy instances. It is desirable to run below, and then re-run the docker composition.
+
+```bash
+rm -rf volumes/etcd volumes/milvus volumes/minio
+```
+
+Or give it a try to implement invalidation before dropping the collection in the python code.
+
+```python
+collection_name = "my_collection_name"
+
+# Enforcing cache invalidation
+utility.invalidate_collection_cache(collection_name)
+
+utility.drop_collection(collection_name)
+```
+
+
 ## Supported scripts
 The supported scripts are stored in `scripts` directory.
 - `docker_monitor.py`: docker stat monitoring script
