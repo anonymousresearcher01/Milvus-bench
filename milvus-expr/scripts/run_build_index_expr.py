@@ -69,6 +69,7 @@ if __name__ == "__main__":
 
     timing_stats["total"] = time.time() - total_start
 
+    print("\n[ Expr.2 인덱스 빌드 실험 결과 ]")
     print(f"총 인덱스 빌드 소요 시간: {timing_stats['total']:.2f}초")
 
     index_info = collection.index().params
@@ -76,8 +77,6 @@ if __name__ == "__main__":
 
     io_stats = load_io_stats(experiment_name)
     print_io_summary(io_stats)
-
-    plot_build_index(experiment_name, timing_stats, args.num, io_stats)
 
     with open(f"../result_stat/{json_output_name}", "w") as f:
         combined_stats = {
@@ -90,4 +89,5 @@ if __name__ == "__main__":
         }
         json.dump(combined_stats, f, indent=2)
 
+    plot_build_index(experiment_name, timing_stats, args.num, io_stats)
     print(f"\nComplete Expr2. The result has been stored to {json_output_name}")
