@@ -1,18 +1,17 @@
 import argparse
 import os
 import time
+from typing import List
 import numpy as np
 import pandas as pd
 import subprocess
+import json
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
+
+from io_utility import load_io_stats, print_io_summary
 
 
 def prepare_collection(collection_name, dim):
-    if utility.has_collection(collection_name):
-        print("Found existing collection. This is automatically supposed to be deleted now.")
-        utility.drop_collection(collection_name)
-        print(f"'{collection_name}' Deleted!")
-
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
         FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim),
@@ -20,11 +19,11 @@ def prepare_collection(collection_name, dim):
     ]
     schema = CollectionSchema(fields, description="Text embeddings collection")
     collection = Collection(name=collection_name, schema=schema)
-    print(f"Created collection: '{collection_name}'.")
+    print(f"Created collection: {collection_name}.")
     return collection
 
 
-def insert_vectors(collection, vectors, texts, batch_size=1000):
+def insert_vectors(collection, vectors, texts, batch_size=1000) -> List[int]:
     total = vectors.shape[0]
     insert_times = []
 
@@ -35,10 +34,9 @@ def insert_vectors(collection, vectors, texts, batch_size=1000):
 
         entities = [batch_vectors, batch_texts]
 
-        start_batch = time.time()
+        batch_start = time.time()
         collection.insert(entities)
-        end_batch = time.time()
-        batch_time = end_batch - start_batch
+        batch_time = time.time() - batch_start
         insert_times.append(batch_time)
 
         print(f"Insert 진행률: {end}/{total}, 배치 시간: {batch_time:.4f}초")
@@ -54,65 +52,129 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    print("Cleaning system cache...")
+    try:
+        subprocess.run(["sync"])
+        subprocess.run(["sudo", "sh", "-c", "echo 3 > /proc/sys/vm/drop_caches"])
+        print("Cleaning system cache done.")
+    except Exception as e:
+        raise AssertionError(e)
+
     collection_name = f"test_collection_{args.num}"
+    json_output_name = f"insert_results_{args.num}.json"
     embeddings_file = os.path.join(args.data_path, f"text_embeddings_{args.num}.npy")
     metadata_file = os.path.join(args.data_path, f"text_metadata_{args.num}.csv")
+    timing_stats = {
+        "load_data": 0,
+        "prepare_collection": 0,
+        "insert_batches": [],
+        "flush_to_disk": 0,
+        "sync_disk": 0,
+        "total": 0,
+    }
 
-    subprocess.run(["bash", "-c", "source ./io_monitor.sh; start_monitoring insert"])
+    # subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "insert"])
+    # time.sleep(5)
 
+    os.makedirs("../result_stat/io_monitoring", exist_ok=True)
+
+    # 0. Preprocess
     print("Connecting to Milvus...")
     connections.connect("default", host="localhost", port="19530")
 
-    print(f"Embedding Data Loading: {embeddings_file}")
+    if utility.has_collection(collection_name):
+        print("Found existing collection. This is automatically supposed to be deleted now.")
+        utility.drop_collection(collection_name)
+        print(f"{collection_name} Deleted!")
+
+    # Measure start time
+    total_start = time.time()
+
+    # 1. Load for embeddings and metadata files
+    print("Loading embedding and metadata files...")
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "load_data"])
+
+    load_start = time.time()
     embeddings = np.load(embeddings_file)
-    print(f"Metadata Loading: {metadata_file}")
     metadata = pd.read_csv(metadata_file)
-
     dim = embeddings.shape[1]
-    print(f"Check embedding dim: {dim}")
-    print(f"Check total # of vectors: {embeddings.shape[0]}")
+    timing_stats["load_data"] = time.time() - load_start
 
-    start_time = time.time()
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", "load_data"])
+
+    # 2. Prepare collection
     print("Preparing collection...")
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "prepare_collection"])
+
+    prepare_start = time.time()
     collection = prepare_collection(collection_name, dim)
+    timing_stats["prepare_collection"] = time.time() - prepare_start
 
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", "prepare_collection"])
+
+    # 3. Insert vector as a batch
     print("Inserting vectors...")
-    insert_times = insert_vectors(collection, embeddings, metadata["text"])
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "insert_vectors"])
 
-    print("Data flushing...")
+    timing_stats["insert_batches"] = insert_vectors(collection, embeddings, metadata["text"])
+
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", "insert_vectors"])
+
+    # 4. Flush collection
+    print("Flushing collection...")
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "flush_collection"])
+
     flush_start = time.time()
     collection.flush()  # explicit flush
-    flush_end = time.time()
+    timing_stats["flush_to_disk"] = time.time() - flush_start
 
-    end_time = time.time()
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", "flush_collection"])
 
-    # NOTE(dhmin): Other metric will be introduced.
-    total_time = end_time - start_time
-    flush_time = flush_end - flush_start
-    avg_batch_time = sum(insert_times) / len(insert_times)
-    avg_vectors_per_sec = embeddings.shape[0] / total_time
+    # 5. Perform sync
+    print("Synchronizing to the disk...")
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "sync_disk"])
 
-    print("\n===== Expr.1 삽입 실험 결과 =====")
-    print(f"총 벡터 수: {embeddings.shape[0]}")
-    print(f"총 삽입 시간: {total_time:.2f}초")
-    print(f"Flush 시간: {flush_time:.2f}초")
-    print(f"평균 배치 삽입 시간: {avg_batch_time:.4f}초")
-    print(f"벡터/초: {avg_vectors_per_sec:.2f}")
+    sync_start = time.time()
+    subprocess.run(["sync"])
+    timing_stats["sync_disk"] = time.time() - sync_start
 
-    results = {
-        "total_vectors": embeddings.shape[0],
-        "dimension": dim,
-        "total_time(s)": total_time,
-        "flush_time(s)": flush_time,
-        "avg_batch_time(s)": avg_batch_time,
-        "vectors_per_second(s)": avg_vectors_per_sec,
-        "batch_times(s)": insert_times,
-    }
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", "sync_disk"])
 
-    import json
+    # Measure end time
+    timing_stats["total"] = time.time() - total_start
 
-    with open(f"../result_stat/insert_results_{args.num}.json", "w") as f:
-        json.dump(results, f, indent=2)
+    print("\n[ Expr.1 삽입 실험 결과 ]")
 
-    subprocess.run(["bash", "-c", "source ./io_monitor.sh; stop_monitoring insert"])
-    print(f"\n Complete Expr1. The result has been stored to insert_results_{args.num}.json")
+    print(f"총 실행 시간: {timing_stats['total']:.4f}초")
+    print(f"데이터 로드: {timing_stats['load_data']:.4f}초 ({timing_stats['load_data']/timing_stats['total']*100:.2f}%)")
+    print(
+        f"컬렉션 준비: {timing_stats['prepare_collection']:.4f}초 ({timing_stats['prepare_collection']/timing_stats['total']*100:.2f}%)"
+    )
+
+    total_insert_time = sum(timing_stats["insert_batches"])
+    print(f"벡터 삽입 총시간: {total_insert_time:.4f}초 ({total_insert_time/timing_stats['total']*100:.2f}%)")
+    print(f"평균 배치 삽입 시간: {np.mean(timing_stats['insert_batches']):.4f}초")
+    print(f"최대 배치 삽입 시간: {np.max(timing_stats['insert_batches']):.4f}초")
+    print(f"최소 배치 삽입 시간: {np.min(timing_stats['insert_batches']):.4f}초")
+    print(f"배치 삽입 시간 표준편차: {np.std(timing_stats['insert_batches']):.4f}초")
+
+    vectors_per_second = len(embeddings) / total_insert_time
+    print(f"초당 삽입 벡터 수: {vectors_per_second:.2f} vectors/s")
+
+    print(
+        f"컬렉션 flush: {timing_stats['flush_to_disk']:.4f}초 ({timing_stats['flush_to_disk']/timing_stats['total']*100:.2f}%)"
+    )
+    print(f"sync 명령: {timing_stats['sync_disk']:.4f}초 ({timing_stats['sync_disk']/timing_stats['total']*100:.2f}%)")
+
+    io_stats = load_io_stats()
+    print_io_summary(io_stats)
+
+    with open(f"../result_stat/{json_output_name}", "w") as f:
+        combined_stats = {"timing": timing_stats, "io_stats": io_stats}
+        json.dump(combined_stats, f, indent=2)
+
+    # plot(timing_stats, args.num, io_stats)
+
+    # time.sleep(5)
+    # subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring insert"])
+    print(f"\n Complete Expr1. The result has been stored to {json_output_name}")
