@@ -1,16 +1,20 @@
 import os
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import pandas as pd
 from tabulate import tabulate
 
-supported_phases: List[str] = ["load_data", "prepare_collection", "flush_collection", "insert_vectors", "sync_disk"]
+insert_vector_phase: Set[str] = {"load_data", "prepare_collection", "flush_collection", "insert_vectors", "sync_disk"}
+build_index_phase: Set[str] = {"build_index", "sync_disk"}
+load_index_phase: Set[str] = set()
+search_vector_phase: Set[str] = set()
+supported_phases: Set[str] = insert_vector_phase | build_index_phase | load_index_phase | search_vector_phase
 
 
-def load_io_stats() -> Dict[str, List[Dict[str, int]]]:
+def load_io_stats(expr: str = None) -> Dict[str, List[Dict[str, int]]]:
     """Load I/O information reading I/O stat file"""
     io_stats = {}
-    io_dir = "../result_stat/io_monitoring"
+    io_dir = f"../result_stat/io_monitoring/{expr}" if expr else "../result_stat/io_monitoring"
 
     for filename in os.listdir(io_dir):
         # NOTE(Dhmin): These file name rule depends on how to store I/O information file when monitoring I/O (See io_monitor.sh)
