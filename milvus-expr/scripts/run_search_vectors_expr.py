@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
-# run_search_experiment.py
 import os
 import argparse
 import time
-import numpy as np
 import json
 import subprocess
 import random
 from sentence_transformers import SentenceTransformer
-from pymilvus import connections, Collection, utility
+from pymilvus import connections, Collection
+
+from io_utility import load_io_stats, print_io_summary
+from plot_utility import plot_search_vectors
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -79,20 +79,17 @@ def generate_random_query(num_words=5):
     return " ".join(random.sample(words, k=min(num_words, len(words))))
 
 
-def run_search(query_texts, top_k=10):
+def run_search(query_texts, query_vectors, top_k=10):
     """Run vectorDB search"""
     search_latencies = []
     all_results = []
 
-    print(f"Searching {len(query_texts)} queries...")
-
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    query_vectors = model.encode(query_texts)
+    print(f"Searching {len(query_vectors)} queries...")
 
     search_params = {"metric_type": "COSINE", "params": {"ef": 64}}
 
     for i, query_vector in enumerate(query_vectors):
-        print(f"Query {i+1}/{len(query_texts)} Execution: '{query_texts[i]}'")
+        print(f"Query {i+1}/{len(query_vectors)} Execution: '{query_texts[i]}'")
 
         start_time = time.time()
         results = collection.search(
@@ -123,7 +120,7 @@ def run_search(query_texts, top_k=10):
 
         all_results.append({"query": query_texts[i], "latency": latency, "results": query_results})
 
-        print(f"  - 검색 완료. 지연 시간: {latency:.4f}초")
+        print(f"  - Done to search. elapsed time: {latency:.4f} sec")
 
     return search_latencies, all_results
 
@@ -135,17 +132,15 @@ if __name__ == "__main__":
     parser.add_argument("--topk", type=int, default=10, help="Top-k")
     args = parser.parse_args()
     collection_name = f"test_collection_{args.num}"
+    experiment_name = "search_vectors"
+    json_output_name = f"{experiment_name}_results_{args.num}.json"
     num_queries = args.query
     top_k = args.topk
+    timing_stats = {"search_vectors": 0, "total": 0}
 
-    # subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", "search"])
-    # time.sleep(5)
-
-    print("Connecting to Milvus...")
+    # 0. Preprocess
+    print("Connecting to Milvus and loading collection...")
     connections.connect("default", host="localhost", port="19530")
-    print(f"Collection Loading: '{collection_name}'...")
-    # existing_collection = utility.list_collections()
-
     collection = Collection(name=collection_name)
 
     if collection.has_index():
@@ -153,9 +148,6 @@ if __name__ == "__main__":
         print("Collected Loaded!")
 
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-    print(f"Generating random queries of {num_queries}...")
-    query_texts = [generate_random_query() for _ in range(num_queries)]
 
     print("Executing warm-up query...")
     warmup_query = "my decision is to dive everyday to the history without thinking"
@@ -166,44 +158,58 @@ if __name__ == "__main__":
         param={"metric_type": "COSINE", "params": {"ef": 64}},
         limit=5,
     )
+    print(f"Generating random queries of {num_queries}...")
+    query_texts = [generate_random_query() for _ in range(num_queries)]
+    query_vectors = model.encode(query_texts)
 
+    # Measure the start time
+    total_start = time.time()
+
+    # 1. Search vectors
     print("\nSearching actual query...")
-    start_time = time.time()
-    search_latencies, all_results = run_search(query_texts, top_k)
-    end_time = time.time()
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "search_vectors"])
+
+    search_vectors_start = time.time()
+    search_latencies, all_results = run_search(query_texts, query_vectors, top_k)
+    timing_stats["search_vectors"] = time.time() - search_vectors_start
+
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "search_vectors"])
+
+    timing_stats["total"] = time.time() - total_start
 
     # 결과 분석
-    total_time = end_time - start_time
     avg_latency = sum(search_latencies) / len(search_latencies)
     min_latency = min(search_latencies)
     max_latency = max(search_latencies)
     p95_latency = sorted(search_latencies)[int(len(search_latencies) * 0.95)]
-    qps = num_queries / total_time
+    qps = num_queries / timing_stats["total"]
 
-    print("\n===== Expr.4 검색 실험 결과 =====")
+    print("\n[ Expr.4 벡터 탐색 실험 결과 ]")
     print(f"총 쿼리 수: {num_queries}")
-    print(f"총 실행 시간: {total_time:.2f}초")
+    print(f"총 실행 시간: {timing_stats['total']:.2f}초")
     print(f"평균 지연 시간: {avg_latency:.4f}초")
     print(f"최소 지연 시간: {min_latency:.4f}초")
     print(f"최대 지연 시간: {max_latency:.4f}초")
     print(f"95퍼센타일 지연 시간: {p95_latency:.4f}초")
     print(f"초당 쿼리 수(QPS): {qps:.2f}")
 
-    results = {
-        "total_queries": num_queries,
-        "total_time": total_time,
-        "avg_latency": avg_latency,
-        "min_latency": min_latency,
-        "max_latency": max_latency,
-        "p95_latency": p95_latency,
-        "qps": qps,
-        "individual_latencies": search_latencies,
-        "query_results": all_results,
-    }
+    io_stats = load_io_stats(experiment_name)
+    print_io_summary(io_stats)
 
-    with open(f"../result_stat/search_results_{args.num}.json", "w") as f:
-        json.dump(results, f, indent=2)
+    with open(f"../result_stat/{json_output_name}", "w") as f:
+        combined_stats = {
+            "timing": timing_stats,
+            "io_stats": io_stats,
+            "total_queries": num_queries,
+            "avg_latency": avg_latency,
+            "min_latency": min_latency,
+            "max_latency": max_latency,
+            "p95_latency": p95_latency,
+            "qps": qps,
+            "individual_latencies": search_latencies,
+            "query_results": all_results,
+        }
+        json.dump(combined_stats, f, indent=2)
 
-    # time.sleep(5)
-    # subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring search"])
-    print(f"\n Complete Expr4. The result has been stored to search_results_{args.num}.json")
+    plot_search_vectors(experiment_name, timing_stats, args.num, io_stats)
+    print(f"\nComplete Expr4. The result has been stored to {json_output_name}")

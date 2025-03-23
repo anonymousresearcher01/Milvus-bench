@@ -6,8 +6,8 @@ from tabulate import tabulate
 
 insert_vector_phase: Set[str] = {"load_data", "prepare_collection", "flush_collection", "insert_vectors", "sync_disk"}
 build_index_phase: Set[str] = {"build_index", "sync_disk"}
-load_index_phase: Set[str] = set()
-search_vector_phase: Set[str] = set()
+load_index_phase: Set[str] = {"load_index"}
+search_vector_phase: Set[str] = {"search_vectors"}
 supported_phases: Set[str] = insert_vector_phase | build_index_phase | load_index_phase | search_vector_phase
 
 
@@ -49,7 +49,7 @@ def load_io_stats(expr: str = None) -> Dict[str, List[Dict[str, int]]]:
 
 def print_io_summary(io_stats: Dict[str, List[Dict[str, int]]]) -> None:
     """Print the summary of I/O information from io_stats loaded"""
-    table_header = ["Device", "# of Read", "# of Write", "Read Size (MB)", "Write Size (MB)"]
+    table_header = ["Device", "# of Read", "Read Size (MB)", "# of Write", "Write Size (MB)"]
     table = []
 
     for phase, stats in io_stats.items():

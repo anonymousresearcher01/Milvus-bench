@@ -9,7 +9,7 @@ from plot_utility import plot_build_index
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Index Build Expr")
+    parser = argparse.ArgumentParser(description="Index Build Experiment")
     parser.add_argument("--num", type=int, default=1000, help="Number of samples")
     args = parser.parse_args()
 

@@ -142,7 +142,7 @@ if __name__ == "__main__":
     # Measure end time
     timing_stats["total"] = time.time() - total_start
 
-    print("\n[ Expr.1 삽입 실험 결과 ]")
+    print("\n[ Expr.1 벡터 삽입 실험 결과 ]")
 
     print(f"총 실행 시간: {timing_stats['total']:.4f}초")
     print(f"데이터 로드: {timing_stats['load_data']:.4f}초 ({timing_stats['load_data']/timing_stats['total']*100:.2f}%)")
