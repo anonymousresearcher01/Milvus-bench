@@ -1,5 +1,6 @@
 import os
 import argparse
+import sqlite3
 import time
 import json
 import subprocess
@@ -79,7 +80,31 @@ def generate_random_query(num_words=5):
     return " ".join(random.sample(words, k=min(num_words, len(words))))
 
 
-def run_search(query_texts, query_vectors, top_k=10):
+def create_db_from_file(dataset_file, db_file="embedding_text.db"):
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS embeddings (
+            embedding_index INTEGER PRIMARY KEY,
+            text TEXT
+        )
+    """
+    )
+
+    with open(dataset_file, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().rsplit(",", 1)
+            if len(parts) == 2 and not (parts[0] == "text" and parts[1] == "embedding_index"):
+                # print(parts)
+                text, embedding_index = parts
+                cursor.execute("INSERT OR IGNORE INTO embeddings VALUES (?, ?)", (int(embedding_index), text))
+
+    conn.commit()
+    conn.close()
+
+
+def run_search(metadata_file, query_texts, query_vectors, top_k=10):
     """Run vectorDB search"""
     search_latencies = []
     all_results = []
@@ -87,6 +112,11 @@ def run_search(query_texts, query_vectors, top_k=10):
     print(f"Searching {len(query_vectors)} queries...")
 
     search_params = {"metric_type": "COSINE", "params": {"ef": 64}}
+    db_file = "embedding_text.db"
+
+    create_db_from_file(metadata_file)
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
 
     for i, query_vector in enumerate(query_vectors):
         print(f"Query {i+1}/{len(query_vectors)} Execution: '{query_texts[i]}'")
@@ -98,7 +128,7 @@ def run_search(query_texts, query_vectors, top_k=10):
             param=search_params,
             limit=top_k,
             expr=None,
-            output_fields=["text"],
+            output_fields=["embedding_index"],
         )
         end_time = time.time()
 
@@ -108,13 +138,19 @@ def run_search(query_texts, query_vectors, top_k=10):
         query_results = []
         for hits in results:
             for hit in hits:
+                cursor.execute("SELECT text FROM embeddings WHERE embedding_index=?", (hit.embedding_index,))
+                row = cursor.fetchone()
+                original_text = row[0] if row else "Not found"
+
                 query_results.append(
                     {
                         "id": hit.id,
                         "distance": hit.distance,
-                        "text": (hit.entity.get("text") or "")[:100] + "..."
-                        if len(hit.entity.get("text") or "") > 100
-                        else hit.entity.get("text") or "",
+                        "embedding_index": hit.embedding_index,
+                        "original_text": original_text,
+                        # "text": (hit.entity.get("text") or "")[:100] + "..."
+                        # if len(hit.entity.get("text") or "") > 100
+                        # else hit.entity.get("text") or "",
                     }
                 )
 
@@ -128,12 +164,16 @@ def run_search(query_texts, query_vectors, top_k=10):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Index Build Expr")
     parser.add_argument("--num", type=int, default=1000, help="Number of samples")
+    parser.add_argument(
+        "--data_path", type=str, default="/mnt/sda/milvus-io-test/data/random_generated/", help="Input data path"
+    )
     parser.add_argument("--query", type=int, default=50, help="Number of queries to test")
     parser.add_argument("--topk", type=int, default=10, help="Top-k")
     args = parser.parse_args()
     collection_name = f"test_collection_{args.num}"
     experiment_name = "search_vectors"
     json_output_name = f"{experiment_name}_results_{args.num}.json"
+    metadata_file = os.path.join(args.data_path, f"text_metadata_{args.num}.csv")
     num_queries = args.query
     top_k = args.topk
     timing_stats = {"search_vectors": 0, "total": 0}
@@ -170,7 +210,7 @@ if __name__ == "__main__":
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "search_vectors"])
 
     search_vectors_start = time.time()
-    search_latencies, all_results = run_search(query_texts, query_vectors, top_k)
+    search_latencies, all_results = run_search(metadata_file, query_texts, query_vectors, top_k)
     timing_stats["search_vectors"] = time.time() - search_vectors_start
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "search_vectors"])

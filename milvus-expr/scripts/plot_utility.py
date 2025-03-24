@@ -226,7 +226,7 @@ def plot_search_vectors(experiment_name, timing_stats, num, io_stats=None):
             bar.get_x() + bar.get_width() / 2.0, height + 0.005, f"{value:.4f}", ha="center", va="bottom", rotation=0
         )
 
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(f"../result_stat/search_latency_summary_{num}.png")
 
     plt.figure(figsize=(6, 5))
@@ -241,24 +241,6 @@ def plot_search_vectors(experiment_name, timing_stats, num, io_stats=None):
 
     plt.tight_layout()
     plt.savefig(f"../result_stat/search_qps_{num}.png")
-
-    # # 개별 쿼리 지연 시간 시각화
-    # if latencies and len(latencies) <= 100:  # 쿼리 수가 100개 이하인 경우만
-    #     plt.figure(figsize=(12, 6))
-
-    #     x = np.arange(len(latencies))
-    #     plt.bar(x, latencies, width=0.6, color='#3498db')
-    #     plt.xlabel('쿼리 인덱스')
-    #     plt.ylabel('지연 시간 (초)')
-    #     plt.title(f'개별 쿼리 지연 시간')
-    #     plt.grid(True, axis='y', linestyle='--', alpha=0.7)
-
-    #     if len(latencies) <= 20:  # 쿼리 수가 적은 경우 값 표시
-    #         for i, v in enumerate(latencies):
-    #             plt.text(i, v + 0.0015, f'{v:.4f}', ha='center', va='bottom', fontsize=8, rotation=90)
-
-    #     plt.tight_layout()
-    #     plt.savefig(f"../result_stat/search_individual_latencies_{num}.png")
 
     if io_stats is not None:
         plot_io_stats(experiment_name, io_stats, num)

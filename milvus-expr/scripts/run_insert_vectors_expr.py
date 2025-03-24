@@ -16,7 +16,8 @@ def prepare_collection(collection_name, dim):
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
         FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+        # FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="embedding_index", dtype=DataType.INT64),
     ]
     schema = CollectionSchema(fields, description="Text embeddings collection")
     collection = Collection(name=collection_name, schema=schema)
@@ -115,7 +116,8 @@ if __name__ == "__main__":
     print("Inserting vectors...")
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "insert_vectors"])
 
-    timing_stats["insert_batches"] = insert_vectors(collection, embeddings, metadata["text"])
+    # timing_stats["insert_batches"] = insert_vectors(collection, embeddings, metadata["text"])
+    timing_stats["insert_batches"] = insert_vectors(collection, embeddings, metadata["embedding_index"])
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "insert_vectors"])
 
