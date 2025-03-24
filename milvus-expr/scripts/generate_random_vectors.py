@@ -7,6 +7,7 @@ import random
 import string
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
+import torch
 
 
 def generate_random_text(min_words=20, max_words=80):
@@ -29,6 +30,8 @@ parser.add_argument(
     help="Path for storing results",
 )
 parser.add_argument("--num", type=int, default=1000, help="Number of samples to use for generation")
+parser.add_argument("--gpu", action="store_true", help="Use GPU acceleration if available")
+parser.add_argument("--batch_size", type=int, default=1000, help="Batch size for processing")
 args = parser.parse_args()
 
 data_dir = args.out_path  # "/mnt/sda/milvus-io-test/data/random_generated/"
@@ -36,8 +39,9 @@ os.makedirs(data_dir, exist_ok=True)
 
 # Config for generating virtual texts
 num_texts = args.num  # number of texts
-batch_size = 1000
+batch_size = args.batch_size
 num_batches = (num_texts + (batch_size - 1)) // batch_size
+device = torch.device("cuda" if torch.cuda.is_available() and args.gpu else "cpu")
 
 # Set file path
 text_file = os.path.join(data_dir, f"random_texts_{args.num}.txt")
@@ -46,6 +50,7 @@ metadata_file = os.path.join(data_dir, f"text_metadata_{args.num}.csv")
 
 # NOTE(Dhmin): Not desirable 'Extract -> Embedding model load -> Transform -> File write' due to OOM
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+model.to(device)
 embedding_dim = None
 
 with open(text_file, "w") as f:
@@ -67,7 +72,8 @@ def process_batch(start_idx: int, end_idx: int, current_batch_size: int, embeddi
 
     # 2. Transform
     print("Embedding batch...")
-    batch_embeddings = model.encode(batch_texts)
+    # batch_embeddings = model.encode(batch_texts)
+    batch_embeddings = model.encode(batch_texts, show_progress_bar=True, device=device)
     local_embedding_dim = batch_embeddings.shape[1]
     if embedding_dim is None:
         print(f"Embedding dimensions: {batch_embeddings.shape}")
@@ -89,6 +95,11 @@ def process_batch(start_idx: int, end_idx: int, current_batch_size: int, embeddi
     del batch_texts
     del batch_embeddings
     del batch_metadata
+
+    # GPU CUDA memory cleanup if using GPU
+    if torch.cuda.is_available() and args.gpu:
+        torch.cuda.empty_cache()
+
     gc.collect()
     print(f"Completed batch {batch_idx + 1}, memory cleaned.")
     return local_embedding_dim
