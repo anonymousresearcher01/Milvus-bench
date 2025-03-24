@@ -78,6 +78,36 @@ def plot_inser_vectors(experiment_name, timing_stats, num, io_stats=None):
     plt.title("Time distribution during vector insertion")
     plt.savefig(f"../result_stat/insert_vectors_time_breakdown_{num}.png")
 
+    # CDF
+    plt.figure(figsize=(10, 6))
+
+    cumulative_times = np.cumsum(timing_stats["insert_batches"])
+
+    total_time = cumulative_times[-1]
+
+    x_values = cumulative_times
+    y_values = np.arange(1, len(timing_stats["insert_batches"]) + 1) / len(timing_stats["insert_batches"])
+
+    plt.plot(x_values, y_values, marker=".", linestyle="-")
+    plt.xlabel("Elapsed Time (sec)")
+    plt.ylabel("Fraction of Vectors Inserted")
+    plt.title("CDF of Vector Insertion Completion")
+    plt.grid(True)
+
+    percentiles = [0.25, 0.5, 0.75, 0.9]
+    for p in percentiles:
+        idx = np.abs(y_values - p).argmin()
+        plt.axhline(y=p, color="r", linestyle="--", alpha=0.3)
+        plt.axvline(x=x_values[idx], color="r", linestyle="--", alpha=0.3)
+        plt.annotate(
+            f"{int(p*100)}%: {x_values[idx]:.2f}s",
+            xy=(x_values[idx], p),
+            xytext=(x_values[idx] + total_time * 0.02, p + 0.02),
+            arrowprops=dict(arrowstyle="->", color="black"),
+        )
+
+    plt.savefig(f"../result_stat/insert_vectors_cdf_{num}.png")
+
     if io_stats is not None:
         plot_io_stats(experiment_name, io_stats, num)
 
@@ -234,7 +264,7 @@ def plot_search_vectors(experiment_name, timing_stats, num, io_stats=None):
     qps = results.get("qps", 0)
     plt.bar(["QPS"], [qps], color="#9b59b6", width=0.4)
     plt.ylabel("Queries per Second")
-    plt.title("Search Performance (QPS)")
+    plt.title("Search Performance (QPS)", pad=20)
     plt.grid(True, axis="y", linestyle="--", alpha=0.7)
 
     plt.text(0, qps + qps * 0.05, f"{qps:.2f}", ha="center", va="bottom", fontsize=12)

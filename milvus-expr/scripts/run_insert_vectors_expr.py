@@ -1,5 +1,6 @@
 import argparse
 import os
+import sqlite3
 import time
 from typing import List
 import numpy as np
@@ -46,6 +47,30 @@ def insert_vectors(collection, vectors, texts, batch_size=1000) -> List[int]:
     return insert_times
 
 
+def create_db_from_file(dataset_file, db_file="embedding_text.db"):
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS embeddings (
+            embedding_index INTEGER PRIMARY KEY,
+            text TEXT
+        )
+    """
+    )
+
+    with open(dataset_file, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().rsplit(",", 1)
+            if len(parts) == 2 and not (parts[0] == "text" and parts[1] == "embedding_index"):
+                # print(parts)
+                text, embedding_index = parts
+                cursor.execute("INSERT OR IGNORE INTO embeddings VALUES (?, ?)", (int(embedding_index), text))
+
+    conn.commit()
+    conn.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Vector Insertion Experiment")
     parser.add_argument("--num", type=int, default=1000, help="Number of samples to use for insertion")
@@ -71,6 +96,7 @@ if __name__ == "__main__":
         "load_data": 0,
         "prepare_collection": 0,
         "insert_batches": [],
+        "create_sqlite_db": 0,
         "flush_to_disk": 0,
         "sync_disk": 0,
         "total": 0,
@@ -121,7 +147,17 @@ if __name__ == "__main__":
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "insert_vectors"])
 
-    # 4. Flush collection
+    # 4. Generate DB file from source data
+    print("Creating DB...")
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "create_sqlite_db"])
+
+    create_db_start = time.time()
+    create_db_from_file(metadata_file)
+    timing_stats["create_sqlite_db"] = time.time() - create_db_start
+
+    subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "create_sqlite_db"])
+
+    # 5. Flush collection
     print("Flushing collection...")
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "flush_collection"])
 
@@ -131,7 +167,7 @@ if __name__ == "__main__":
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "flush_collection"])
 
-    # 5. Perform sync
+    # 6. Perform sync
     print("Synchronizing to the disk...")
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "sync_disk"])
 

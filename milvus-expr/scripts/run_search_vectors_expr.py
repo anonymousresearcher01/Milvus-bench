@@ -80,41 +80,14 @@ def generate_random_query(num_words=5):
     return " ".join(random.sample(words, k=min(num_words, len(words))))
 
 
-def create_db_from_file(dataset_file, db_file="embedding_text.db"):
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS embeddings (
-            embedding_index INTEGER PRIMARY KEY,
-            text TEXT
-        )
-    """
-    )
-
-    with open(dataset_file, "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().rsplit(",", 1)
-            if len(parts) == 2 and not (parts[0] == "text" and parts[1] == "embedding_index"):
-                # print(parts)
-                text, embedding_index = parts
-                cursor.execute("INSERT OR IGNORE INTO embeddings VALUES (?, ?)", (int(embedding_index), text))
-
-    conn.commit()
-    conn.close()
-
-
-def run_search(metadata_file, query_texts, query_vectors, top_k=10):
+def run_search(db_file, query_texts, query_vectors, top_k=10):
     """Run vectorDB search"""
     search_latencies = []
     all_results = []
 
     print(f"Searching {len(query_vectors)} queries...")
-
     search_params = {"metric_type": "COSINE", "params": {"ef": 64}}
-    db_file = "embedding_text.db"
 
-    create_db_from_file(metadata_file)
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
 
@@ -130,10 +103,6 @@ def run_search(metadata_file, query_texts, query_vectors, top_k=10):
             expr=None,
             output_fields=["embedding_index"],
         )
-        end_time = time.time()
-
-        latency = end_time - start_time
-        search_latencies.append(latency)
 
         query_results = []
         for hits in results:
@@ -154,9 +123,13 @@ def run_search(metadata_file, query_texts, query_vectors, top_k=10):
                     }
                 )
 
-        all_results.append({"query": query_texts[i], "latency": latency, "results": query_results})
+        latency = time.time() - start_time
+        search_latencies.append(latency)
 
+        all_results.append({"query": query_texts[i], "latency": latency, "results": query_results})
         print(f"  - Done to search. elapsed time: {latency:.4f} sec")
+
+    conn.close()
 
     return search_latencies, all_results
 
@@ -167,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_path", type=str, default="/mnt/sda/milvus-io-test/data/random_generated/", help="Input data path"
     )
-    parser.add_argument("--query", type=int, default=50, help="Number of queries to test")
+    parser.add_argument("--query", type=int, default=100, help="Number of queries to test")
     parser.add_argument("--topk", type=int, default=10, help="Top-k")
     args = parser.parse_args()
     collection_name = f"test_collection_{args.num}"
@@ -202,6 +175,9 @@ if __name__ == "__main__":
     query_texts = [generate_random_query() for _ in range(num_queries)]
     query_vectors = model.encode(query_texts)
 
+    # create_db_from_file(metadata_file)
+    db_file = "embedding_text.db"
+
     # Measure the start time
     total_start = time.time()
 
@@ -210,7 +186,7 @@ if __name__ == "__main__":
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "search_vectors"])
 
     search_vectors_start = time.time()
-    search_latencies, all_results = run_search(metadata_file, query_texts, query_vectors, top_k)
+    search_latencies, all_results = run_search(db_file, query_texts, query_vectors, top_k)
     timing_stats["search_vectors"] = time.time() - search_vectors_start
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "search_vectors"])

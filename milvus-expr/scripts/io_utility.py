@@ -4,7 +4,14 @@ from typing import Dict, List, Set
 import pandas as pd
 from tabulate import tabulate
 
-insert_vector_phase: Set[str] = {"load_data", "prepare_collection", "flush_collection", "insert_vectors", "sync_disk"}
+insert_vector_phase: Set[str] = {
+    "load_data",
+    "prepare_collection",
+    "flush_collection",
+    "insert_vectors",
+    "create_sqlite_db",
+    "sync_disk",
+}
 build_index_phase: Set[str] = {"build_index", "sync_disk"}
 load_index_phase: Set[str] = {"load_index"}
 search_vector_phase: Set[str] = {"search_vectors"}
