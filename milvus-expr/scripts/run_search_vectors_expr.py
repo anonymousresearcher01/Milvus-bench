@@ -80,7 +80,7 @@ def generate_random_query(num_words=5):
     return " ".join(random.sample(words, k=min(num_words, len(words))))
 
 
-def run_search(db_file, query_texts, query_vectors, top_k=10):
+def run_search(db_filepath, query_texts, query_vectors, top_k=10):
     """Run vectorDB search"""
     search_latencies = []
     all_results = []
@@ -88,7 +88,7 @@ def run_search(db_file, query_texts, query_vectors, top_k=10):
     print(f"Searching {len(query_vectors)} queries...")
     search_params = {"metric_type": "COSINE", "params": {"ef": 64}}
 
-    conn = sqlite3.connect(db_file)
+    conn = sqlite3.connect(db_filepath)
     cursor = conn.cursor()
 
     for i, query_vector in enumerate(query_vectors):
@@ -177,6 +177,7 @@ if __name__ == "__main__":
 
     # create_db_from_file(metadata_file)
     db_file = "embedding_text.db"
+    db_filepath = os.path.join(args.data_path, db_file)
 
     # Measure the start time
     total_start = time.time()
@@ -186,7 +187,7 @@ if __name__ == "__main__":
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "search_vectors"])
 
     search_vectors_start = time.time()
-    search_latencies, all_results = run_search(db_file, query_texts, query_vectors, top_k)
+    search_latencies, all_results = run_search(db_filepath, query_texts, query_vectors, top_k)
     timing_stats["search_vectors"] = time.time() - search_vectors_start
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "search_vectors"])

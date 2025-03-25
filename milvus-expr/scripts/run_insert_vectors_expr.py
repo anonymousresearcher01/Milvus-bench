@@ -47,8 +47,10 @@ def insert_vectors(collection, vectors, texts, batch_size=1000) -> List[int]:
     return insert_times
 
 
-def create_db_from_file(dataset_file, db_file="embedding_text.db"):
-    conn = sqlite3.connect(db_file)
+def create_db_from_file(data_path, dataset_file, db_file="embedding_text.db"):
+    db_path = os.path.join(data_path, db_file)
+
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -69,11 +71,12 @@ def create_db_from_file(dataset_file, db_file="embedding_text.db"):
 
     conn.commit()
     conn.close()
+    print(f"Soruce database has been created at {db_path}.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Vector Insertion Experiment")
-    parser.add_argument("--num", type=int, default=1000, help="Number of samples to use for insertion")
+    parser.add_argument("--num", type=int, default=100000, help="Number of samples to use for insertion")
     parser.add_argument(
         "--data_path", type=str, default="/mnt/sda/milvus-io-test/data/random_generated/", help="Input data path"
     )
@@ -152,7 +155,7 @@ if __name__ == "__main__":
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "start_monitoring", experiment_name, "create_sqlite_db"])
 
     create_db_start = time.time()
-    create_db_from_file(metadata_file)
+    create_db_from_file(args.data_path, metadata_file)
     timing_stats["create_sqlite_db"] = time.time() - create_db_start
 
     subprocess.run(["sudo", "bash", "./io_monitor.sh", "stop_monitoring", experiment_name, "create_sqlite_db"])
