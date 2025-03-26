@@ -1,0 +1,6 @@
+# Extra config to override default milvus.yaml
+mmap:
+    vectorField: true   # 벡터 데이터를 mmap으로 로드
+    vectorIndex: true   # 벡터 인덱스를 mmap으로 로드
+    scalarField: false  # (필요 시 true로 변경)
+    scalarIndex: false  # (필요 시 true로 변경)
